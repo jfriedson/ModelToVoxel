@@ -30,7 +30,7 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 
 
 #if convertMesh
-	const unsigned int level = 1;
+	const unsigned int level = 9;
 	const unsigned int dimension = glm::pow(2, level);
 
 	SVO octree(level);
