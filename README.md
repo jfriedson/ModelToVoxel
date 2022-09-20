@@ -14,7 +14,7 @@ Mouse - look around
 
 
 ## Limitations
-Supports octrees up to a depth of 9 before cracks appear in the voxelization.  This translates to a grid of 256 x 256 x 256.  The issue is that the rasterization pipeline invokes a fragment shader for pixel in the opengl render (1280 x 720). What is really needed is about one fragment shader invocation per voxel space; however, even this method will contain artifacts for very complex models with overlapping triangles.  A more foolproof solution would be to implement a voxelizer in a compute shader.
+Supports octrees up to a depth of 8 before cracks appear in the voxelization.  This translates to a grid of 256 x 256 x 256.  The issue is that the rasterization pipeline invokes a fragment shader for pixel in the opengl render (1280 x 720). What is really needed is about one fragment shader invocation per voxel space; however, even this method will contain artifacts for very complex models with overlapping triangles.  A more foolproof solution would be to implement a voxelizer in a compute shader.
 
 
 ## Dependencies
