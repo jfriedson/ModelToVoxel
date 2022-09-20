@@ -6,20 +6,21 @@ layout(triangles) in;
 layout (triangle_strip, max_vertices = 3) out;
 
 
+in vec3 vsPosition[];
 in vec2 vsTexCoords[];
 
-uniform ivec3 voxelResolution;
+uniform float voxelResolution;
 
 out vec3 gsVoxelPos;
 out vec2 gsTexCoords;
 
 
-vec2 Project(in vec3 v, in int axis) {
-	return axis == 0 ? v.yz : (axis == 1 ? v.xz : v.xy);
+vec3 Project(in vec3 v, in int axis) {
+	return axis == 0 ? v.zyx : (axis == 1 ? v.xzy : v.xyz);
 }
 
 void main() {
-	vec3 axis_weight = abs(cross(gl_in[1].gl_Position.xyz - gl_in[0].gl_Position.xyz, gl_in[2].gl_Position.xyz - gl_in[0].gl_Position.xyz));
+	vec3 axis_weight = abs(cross(vsPosition[1] - vsPosition[0], vsPosition[2] - vsPosition[0]));
 	int axis = 2;
 
 	if(axis_weight.x >= axis_weight.y && axis_weight.x > axis_weight.z)
@@ -27,28 +28,14 @@ void main() {
 	else if(axis_weight.y >= axis_weight.z && axis_weight.y > axis_weight.x)
 		axis = 1;
 
-	vec3 pos0 = gl_in[0].gl_Position.xyz;
-	vec3 pos1 = gl_in[1].gl_Position.xyz;
-	vec3 pos2 = gl_in[2].gl_Position.xyz;
+	for(uint i = 0; i < 3; i++) {
+		gsVoxelPos = vsPosition[i] * voxelResolution;
+		gsTexCoords = vsTexCoords[i];
 
+		gl_Position = vec4(Project(vsPosition[i], axis), 1);
 
-	gsTexCoords = vsTexCoords[0];
-	//gsNormal = normalize(vsNormal[0]);
-	gsVoxelPos = (pos0 + 1.0f) * 0.5f * voxelResolution;
-	gl_Position = vec4(Project(pos0, axis), 1.0f, 1.0f);
-	EmitVertex();
-
-	gsTexCoords = vsTexCoords[1];
-	//gsNormal = normalize(vsNormal[1]);
-	gsVoxelPos = (pos1 + 1.0f) * 0.5f * voxelResolution;
-	gl_Position = vec4(Project(pos1, axis), 1.0f, 1.0f);
-	EmitVertex();
-
-	gsTexCoords = vsTexCoords[2];
-	//gsNormal = normalize(vsNormal[2]);
-	gsVoxelPos = (pos2 + 1.0f) * 0.5f * voxelResolution;
-	gl_Position = vec4(Project(pos2, axis), 1.0f, 1.0f);
-	EmitVertex();
+		EmitVertex();
+	}
 
 	EndPrimitive();
 }

@@ -23,6 +23,8 @@
 
 
 #define convertMesh 1
+#define modelPath "./assets/gallery.obj"
+#define texPath "./assets/gallery.jpg"
 
 
 const int windowWidth = 1280, windowHeight = 720;
@@ -30,7 +32,7 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 
 
 #if convertMesh
-	const unsigned int level = 9;
+	const unsigned int level = 8;
 	const unsigned int dimension = glm::pow(2, level);
 
 	SVO octree(level);
@@ -50,14 +52,14 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		GLuint textureUniform = glGetUniformLocation(modelToVoxelsProgram, "diffuseTex");
 
 		glUseProgram(modelToVoxelsProgram);
-		glUniform3i(voxelResolutionUniform, dimension, dimension, dimension);
+		glUniform1f(voxelResolutionUniform, (float)dimension);
 		glUniform1i(voxelUniform, 0);
 		glUniform1i(textureUniform, 1);
 
-		Model model("./assets/house.obj");
+		Model model(modelPath);
 
 		Texture texture;
-		texture.LoadTextureLinear("./assets/house.jpg");
+		texture.LoadTextureLinear(texPath);
 
 		GLuint voxelIndex;
 		glGenBuffers(1, &voxelIndex);
@@ -68,18 +70,36 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		GLuint voxelData;
 		glGenBuffers(1, &voxelData);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelData);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, 0x00FFFFFFu, NULL, GL_DYNAMIC_COPY);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u, NULL, GL_DYNAMIC_COPY);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, voxelData);
 
 		texture.UseTexture(1);
 
-		std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
+		// timing
+		GLuint timerQuery;
+		glGenQueries(1, &timerQuery);
+
+		glBeginQuery(GL_TIME_ELAPSED, timerQuery);
+
 
 		model.render();
 
 		glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-		std::cout << "model conversion " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
+
+		glEndQuery(GL_TIME_ELAPSED);
+		GLint queryAvailable = 0;
+		GLuint elapsed_time;
+
+		while (!queryAvailable) {
+			glGetQueryObjectiv(timerQuery,
+				GL_QUERY_RESULT_AVAILABLE,
+				&queryAvailable);
+		}
+		glGetQueryObjectuiv(timerQuery, GL_QUERY_RESULT, &elapsed_time);
+
+
+		std::cout << "model conversion: " << elapsed_time / 1000 << "ms" << std::endl;
 
 		texture.~Texture();
 		model.~Model();
@@ -103,16 +123,18 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		glDeleteBuffers(1, &voxelIndex);
 		glDeleteBuffers(1, &voxelData);
 
-		startTime = std::chrono::system_clock::now();
+		glDeleteQueries(1, &timerQuery);
 
-		for (unsigned int voxel = voxelCount; voxel-- > 0;) {
+		std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
+
+		for (unsigned int voxel = 0; voxel < voxelCount; voxel++) {
 			octree.addElement(voxelVec.back().x, voxelVec.back().y, voxelVec.back().z, voxelVec.back().w);
 			voxelVec.pop_back();
 		}
 
 		voxelVec.~vector();
 
-		std::cout << "octree gen " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
+		std::cout << "octree gen: " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
 
 		octree.save("model.svo");
 		octree.printTree(false);
@@ -128,7 +150,7 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 
 
 void loadRTShader(GLuint& rtProgram) {
-	GLuint rtCompShader = voxgl::createShader("./shaders/naive.cs", GL_COMPUTE_SHADER);
+	GLuint rtCompShader = voxgl::createShader("./shaders/naive.comp", GL_COMPUTE_SHADER);
 	std::vector<GLuint> rtShaders;
 	rtShaders.emplace_back(rtCompShader);
 	rtProgram = voxgl::createProgram(rtShaders);
@@ -189,8 +211,8 @@ int raytrace() {
 
 	// create player object
 	Player player;
-	player.position = glm::vec3(1.f, .5f, 1.f);
-	player.camera.direction = glm::vec2(-2.f, -0.7f);
+	player.position = glm::vec3(1.5f, 1.f, .8f);
+	player.camera.direction = glm::vec2(-.7f, -0.3f);
 
 	// create octree object
 	std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
@@ -230,34 +252,56 @@ int raytrace() {
 		//int frames = 0;
 
 		std::vector<unsigned int> renderTimes, drawTimes;
+		GLuint timerQueries[2];
+		glGenQueries(2, timerQueries);
 
 		while (!glfwWindowShouldClose(window)) {
-			startTime = std::chrono::system_clock::now();
-
-
 			// ray trace compute shader
 			glUseProgram(rtProgram);
-
 
 			dataLock.lock();
 			glUniform3f(camPosUniform, player.camera.position.x, player.camera.position.y, player.camera.position.z);
 			glUniformMatrix3fv(camMatUniform, 1, GL_FALSE, glm::value_ptr(glm::transpose(player.camera.getMatrix())));
 			dataLock.unlock();
 
+			glBeginQuery(GL_TIME_ELAPSED, timerQueries[0]);
 			glDispatchCompute(rtX, rtY, 1);
-
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+			glEndQuery(GL_TIME_ELAPSED);
 
-			renderTimes.push_back((std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - startTime)).count());
-			startTime = std::chrono::system_clock::now();
 
 			// draw ray trace texture to quad
+			glBeginQuery(GL_TIME_ELAPSED, timerQueries[1]);
 			glClear(GL_COLOR_BUFFER_BIT);
 			glUseProgram(quadProgram);
 			glDrawArrays(GL_TRIANGLES, 0, 3);
+			glEndQuery(GL_TIME_ELAPSED);
+
 			glfwSwapBuffers(window);
 
-			drawTimes.push_back((std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - startTime)).count());
+
+			// get timer queries from opengl
+			GLint queryAvailable = 0;
+			GLuint elapsed_time;
+
+
+			queryAvailable = 0;
+			while (!queryAvailable) {
+				glGetQueryObjectiv(timerQueries[0],
+					GL_QUERY_RESULT_AVAILABLE,
+					&queryAvailable);
+			}
+			glGetQueryObjectuiv(timerQueries[0], GL_QUERY_RESULT, &elapsed_time);
+			renderTimes.push_back(elapsed_time / 1000);
+
+			queryAvailable = 0;
+			while (!queryAvailable) {
+				glGetQueryObjectiv(timerQueries[1],
+					GL_QUERY_RESULT_AVAILABLE,
+					&queryAvailable);
+			}
+			glGetQueryObjectuiv(timerQueries[1], GL_QUERY_RESULT, &elapsed_time);
+			drawTimes.push_back(elapsed_time / 1000);
 
 			//frames++;
 			if (int(glfwGetTime() - last_refresh) > 0) {
@@ -288,6 +332,8 @@ int raytrace() {
 
 			renderPacer.tick();
 		}
+
+		glDeleteQueries(2, &timerQueries[0]);
 	});
 
 	Timer inputPacer(500);
@@ -330,11 +376,15 @@ int main()
 {
 #if convertMesh
 	glDisable(GL_CULL_FACE);
+	//glDisable(GL_DEPTH_TEST);
+	//glDisable(GL_BLEND);
+
 	meshToVoxels();
 #endif
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
+
 	raytrace();
 
 	return 0;
