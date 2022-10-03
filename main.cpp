@@ -22,39 +22,44 @@
 
 
 
-#define convertMesh 1
+#define convertMesh true
 #define modelPath "./assets/gallery.obj"
 #define texPath "./assets/gallery.jpg"
+#define saveModel true
+#define svoPath "gallery.svo"
 
 
-const int windowWidth = 1280, windowHeight = 720;
-GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
+constexpr int windowWidth = 1280, windowHeight = 720;
+constexpr bool fullscreen = false;
+GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight, fullscreen);
 
 
 #if convertMesh
-	const unsigned int level = 8;
+	const unsigned int level = 12;
 	const unsigned int dimension = glm::pow(2, level);
 
 	SVO octree(level);
 
 	int meshToVoxels() {
-		GLuint modelToVoxelsVertShader = voxgl::createShader("./shaders/modelToVoxels.vs", GL_VERTEX_SHADER);
-		GLuint modelToVoxelsGeomShader = voxgl::createShader("./shaders/modelToVoxels.gs", GL_GEOMETRY_SHADER);
-		GLuint modelToVoxelsFragShader = voxgl::createShader("./shaders/modelToVoxels.fs", GL_FRAGMENT_SHADER);
+		glfwMakeContextCurrent(window);
+		glClearColor(0, 0, 0, 1);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glfwSwapBuffers(window);
+
+		GLuint modelToVoxelsVertShader = voxgl::createShader("./shaders/convertMeshToVoxels.vs", GL_VERTEX_SHADER);
+		GLuint modelToVoxelsGeomShader = voxgl::createShader("./shaders/convertMeshToVoxels.gs", GL_GEOMETRY_SHADER);
+		GLuint modelToVoxelsFragShader = voxgl::createShader("./shaders/convertMeshToVoxels.fs", GL_FRAGMENT_SHADER);
 		std::vector<GLuint> modelToVoxelsShaders;
 		modelToVoxelsShaders.emplace_back(modelToVoxelsVertShader);
 		modelToVoxelsShaders.emplace_back(modelToVoxelsGeomShader);
 		modelToVoxelsShaders.emplace_back(modelToVoxelsFragShader);
 		GLuint modelToVoxelsProgram = voxgl::createProgram(modelToVoxelsShaders);
 
+
 		GLuint voxelResolutionUniform = glGetUniformLocation(modelToVoxelsProgram, "voxelResolution");
-		GLuint voxelUniform = glGetUniformLocation(modelToVoxelsProgram, "voxels");
-		GLuint textureUniform = glGetUniformLocation(modelToVoxelsProgram, "diffuseTex");
 
 		glUseProgram(modelToVoxelsProgram);
 		glUniform1f(voxelResolutionUniform, (float)dimension);
-		glUniform1i(voxelUniform, 0);
-		glUniform1i(textureUniform, 1);
 
 		Model model(modelPath);
 
@@ -67,11 +72,11 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_DRAW);
 		glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, voxelIndex);
 
-		GLuint voxelData;
-		glGenBuffers(1, &voxelData);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelData);
+		GLuint voxelBuffer;
+		glGenBuffers(1, &voxelBuffer);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelBuffer);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u, NULL, GL_DYNAMIC_COPY);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, voxelData);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, voxelBuffer);
 
 		texture.UseTexture(1);
 
@@ -81,11 +86,9 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 
 		glBeginQuery(GL_TIME_ELAPSED, timerQuery);
 
-
 		model.render();
 
 		glMemoryBarrier(GL_ALL_BARRIER_BITS);
-
 
 		glEndQuery(GL_TIME_ELAPSED);
 		GLint queryAvailable = 0;
@@ -99,7 +102,7 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		glGetQueryObjectuiv(timerQuery, GL_QUERY_RESULT, &elapsed_time);
 
 
-		std::cout << "model conversion: " << elapsed_time / 1000 << "ms" << std::endl;
+		std::cout << "model conversion: " << elapsed_time / 1000000 << "ms\n";
 
 		texture.~Texture();
 		model.~Model();
@@ -111,46 +114,67 @@ GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight);
 		glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &voxelCount);
 		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
-		std::cout << voxelCount << " voxels converted" << std::endl;
+		std::cout << voxelCount << " voxels converted\n";
 
-		std::vector<glm::uvec4> voxelVec(voxelCount, glm::uvec4(0));
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelData);
+		std::vector<glm::uvec4> voxelVec(voxelCount);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelBuffer);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(glm::uvec4) * voxelCount, voxelVec.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 		glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 		glDeleteBuffers(1, &voxelIndex);
-		glDeleteBuffers(1, &voxelData);
+		glDeleteBuffers(1, &voxelBuffer);
 
 		glDeleteQueries(1, &timerQuery);
+
+		//glDeleteProgram(modelToVoxelsProgram);
+
 
 		std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
 
 		for (unsigned int voxel = 0; voxel < voxelCount; voxel++) {
-			octree.addElement(voxelVec.back().x, voxelVec.back().y, voxelVec.back().z, voxelVec.back().w);
+			glm::uvec4* const info = &voxelVec.back();
+			const glm::vec2 a = glm::unpackSnorm2x16(info->x);
+			const glm::vec2 b = glm::unpackSnorm2x16(info->y);
+			const glm::vec2 c = glm::unpackSnorm2x16(info->z);
+
+			const glm::uint32_t normal = glm::packSnorm4x8(glm::vec4(b.y, c.x, c.y, 0.f));
+
+			octree.addElement(glm::vec3(a.x, a.y, b.x) * glm::vec3(dimension), info->w, normal);
+
 			voxelVec.pop_back();
+			//if(voxel % 100 == 0)
+			//	voxelVec.shrink_to_fit();
 		}
+
+		// stress test for SVOs. fill every voxel with a random color
+		/*for (unsigned int x = 0; x < dimension; x++)
+			for (unsigned int y = 0; y < dimension; y++)
+				for (unsigned int z = 0; z < dimension; z++)
+					octree.addElement(x, y, z, glm::packUnorm4x8(glm::vec4(0.4f)));*/
 
 		voxelVec.~vector();
 
 		std::cout << "octree gen: " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
 
-		octree.save("model.svo");
+		if (saveModel)
+			octree.save(svoPath);
+
 		octree.printTree(false);
 
 		return 0;
 	}
 #else
 	// load previously converted model
-	SVO octree("model.svo");
+	SVO octree(svoPath);
 #endif
 
 
 
 
 void loadRTShader(GLuint& rtProgram) {
-	GLuint rtCompShader = voxgl::createShader("./shaders/naive.comp", GL_COMPUTE_SHADER);
+	GLuint rtCompShader = voxgl::createShader("./shaders/raytrace.comp", GL_COMPUTE_SHADER);
 	std::vector<GLuint> rtShaders;
 	rtShaders.emplace_back(rtCompShader);
 	rtProgram = voxgl::createProgram(rtShaders);
@@ -204,15 +228,17 @@ int raytrace() {
 	GLuint resolutionUniform = glGetUniformLocation(rtProgram, "resolution");
 	GLuint camPosUniform = glGetUniformLocation(rtProgram, "cameraPos");
 	GLuint camMatUniform = glGetUniformLocation(rtProgram, "cameraMat");
+	GLuint sunDirUniform = glGetUniformLocation(rtProgram, "sunDir");
 
 	glUseProgram(rtProgram);
-	glUniform2i(resolutionUniform, framebufferWidth, framebufferHeight);
+	glUniform2f(resolutionUniform, float(framebufferWidth), float(framebufferHeight));
+	glUniform3f(sunDirUniform, 0.07f, .9f, 0.03f);
 
 
 	// create player object
 	Player player;
-	player.position = glm::vec3(1.5f, 1.f, .8f);
-	player.camera.direction = glm::vec2(-.7f, -0.3f);
+	player.position = glm::vec3(-.3f, .7f, -.3f);
+	player.camera.direction = glm::vec2(1.57f, 0.f);
 
 	// create octree object
 	std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
@@ -262,6 +288,11 @@ int raytrace() {
 			dataLock.lock();
 			glUniform3f(camPosUniform, player.camera.position.x, player.camera.position.y, player.camera.position.z);
 			glUniformMatrix3fv(camMatUniform, 1, GL_FALSE, glm::value_ptr(glm::transpose(player.camera.getMatrix())));
+
+			if (glfwGetKey(window, GLFW_KEY_L)) {
+				glm::vec3 sunDir = -glm::normalize(player.camera.facingRay());
+				glUniform3f(sunDirUniform, sunDir.x, sunDir.y, sunDir.z);
+			}
 			dataLock.unlock();
 
 			glBeginQuery(GL_TIME_ELAPSED, timerQueries[0]);
@@ -325,9 +356,11 @@ int raytrace() {
 				resolutionUniform = glGetUniformLocation(rtProgram, "resolution");
 				camPosUniform = glGetUniformLocation(rtProgram, "cameraPos");
 				camMatUniform = glGetUniformLocation(rtProgram, "cameraMat");
+				sunDirUniform = glGetUniformLocation(rtProgram, "sunDir");
 
 				glUseProgram(rtProgram);
-				glUniform2i(resolutionUniform, framebufferWidth, framebufferHeight);
+				glUniform2f(resolutionUniform, float(framebufferWidth), float(framebufferHeight));
+				glUniform3f(sunDirUniform, 0.07f, .9f, 0.03f);
 			}
 
 			renderPacer.tick();
@@ -374,17 +407,14 @@ int raytrace() {
 
 int main()
 {
-#if convertMesh
-	glDisable(GL_CULL_FACE);
-	//glDisable(GL_DEPTH_TEST);
-	//glDisable(GL_BLEND);
-
-	meshToVoxels();
-#endif
-
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
 
+#if convertMesh
+	meshToVoxels();
+#endif
 	raytrace();
 
 	return 0;
