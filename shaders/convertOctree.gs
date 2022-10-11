@@ -1,5 +1,7 @@
 #version 460
 
+//#define SAFE_INSERT
+
 layout(triangles) in;
 layout (triangle_strip, max_vertices = 3) out;
 
@@ -21,11 +23,11 @@ struct Leaf {
 	uint normal;  // packed 4x8 normal and metal
 };
 
-layout(binding = 0, std430) restrict volatile coherent buffer InnerOctants {
+layout(binding = 0, std430) volatile coherent buffer InnerOctants {
 	InnerOctant innerOctants[];
 };
 
-layout(binding = 1, std430) restrict volatile coherent buffer Leaves {
+layout(binding = 1, std430) volatile coherent buffer Leaves {
 	Leaf leaves[];
 };
 
@@ -67,45 +69,87 @@ void barycentric(in const vec3 p, in const mat3 vertices, out vec3 projCoord) {
 
 
 bool writeVoxels(in const vec3 coord, in const vec4 color, in const vec3 normal) {
+#ifdef SAFE_INSERT
+	// check if there is room in leaf buffer
+	const uint check = atomicCounter(leafIndex);
+	if (check >= 0x10000000u)
+		return false;
+#endif
+
+	// iterate through tree
 	uint depth = 0;
 	float extent = .5f;
 
 	uint index = 0;
 	vec3 offset = vec3(0);
 
-	while (++depth <= treeDepth) {
+	while (++depth < treeDepth) {
 		const bvec3 mask = greaterThanEqual(coord, offset + extent);
 		const int child = int(mask.x) + (int(mask.y) * 2) + (int(mask.z) * 4);
 
 		offset += vec3(mask) * vec3(extent);
 
-		if (depth == treeDepth  &&  innerOctants[index].children[child] == leafBit) {
-			const uint idx = atomicCounterIncrement(leafIndex);
-			if (idx >= 0x8000000u)
-				return false;
-
-			leaves[idx] = Leaf(packUnorm4x8(color.argb), packSnorm4x8(vec4(0, normal)));
-
-			innerOctants[index].children[child] = leafBit | idx;
-
-			return true;
-		}
-
-		// inner node is leaf
-		if (innerOctants[index].children[child] == leafBit) {
+		const uint value = atomicCompSwap(innerOctants[index].children[child], leafBit, 0);
+		// leaf, replace with inner node
+		if(value == leafBit) {
 			const uint idx = atomicCounterIncrement(nodeIndex);
-			if (idx >= 0x4000000u)
-				return false;
 
+		#ifdef SAFE_INSERT
+			if (idx >= 0x4000000u) {
+				atomicCounterExchange(nodeIndex, 0x4000000u);
+				
+				innerOctants[index].children[child] = leafBit;
+				
+				memoryBarrier();
+
+				return false;
+			}
+		#endif
+
+			// set this last purposely for other threads waiting on us
 			innerOctants[index].children[child] = idx;
 
-			for(uint c = 0; c < 8; ++c)
-				innerOctants[idx].children[c] = leafBit;
+			//memoryBarrier();
 		}
+		// node is being created by another thread, wait
+		while(innerOctants[index].children[child] == 0) { }//memoryBarrier(); }
+
+	#ifdef SAFE_INSERT
+		if (innerOctants[index].children[child] == leafBit)
+			return false;
+	#endif
 
 		index = innerOctants[index].children[child];
 
         extent *= 0.5f;
+	}
+
+	// leaf
+	const bvec3 mask = greaterThanEqual(coord, offset + extent);
+	const int child = int(mask.x) + (int(mask.y) * 2) + (int(mask.z) * 4);
+
+	if (atomicCompSwap(innerOctants[index].children[child], leafBit, 0) == leafBit) {
+		const uint idx = atomicCounterIncrement(leafIndex);
+
+	#ifdef SAFE_INSERT
+		if (idx >= 0x10000000u) {
+			atomicCounterExchange(nodeIndex, 0x10000000u);
+
+			innerOctants[index].children[child] = leafBit;
+
+			memoryBarrier();
+
+			return false;
+		}
+	#endif
+
+		leaves[idx] = Leaf(packUnorm4x8(color.argb), packSnorm4x8(vec4(0, normal)));
+
+		innerOctants[index].children[child] = leafBit | idx;
+
+		//memoryBarrier();
+
+		return true;
 	}
 
 	return true;

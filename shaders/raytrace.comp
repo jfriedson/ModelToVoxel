@@ -198,20 +198,19 @@ void main() {
 	#elif defined RAYDEPTH_ALL
 		color = vec3(hitDist);
 	#elif defined SHADOWS || defined DIFFUSE_LIGHTING
+		#if defined SHADOWS
 		vec3 c;
 		
-		#if defined SHADOWS
 		if (castRayOpaque(hitPos, sunDir, c, hitDist, hitPos, normal))
 			color *= min(max(.2f, hitDist), .3f);
-		#if defined DIFFUSE_LIGHTING
+			#if defined DIFFUSE_LIGHTING
 			else
-		#endif
+			#endif
 		#endif
 		#if defined DIFFUSE_LIGHTING
 			color *= max(0.3f, 1.2f * dot(normal, sunDir) - .1f);
 		#endif
 	#endif
-		// color = color
     }
 	#if defined RAYDEPTH_MISS || defined RAYDEPTH_ALL
 		else color = vec3(hitDist);
