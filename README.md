@@ -8,7 +8,11 @@ This relies on [VoxGL](https://github.com/jfriedson/voxgl) for voxel octree data
 
 
 ## How it works
-The conversion shader fills a buffer with voxel data containing the voxel position, color from the texture, and the smoothed normal of the triangle from it's vertex normals.  This data is then transfered to the CPU and the octree is filled.  The octree is then sent to the GPU for drawing.
+The new gpu_gen.cpp and convertOctree.comp allow octree generation on the gpu directly.  This dramatically increases the speed of creating the octree.
+
+Previously, the conversion shader fills a buffer with voxel data containing the voxel position, color from the texture, and the smoothed normal of the triangle from it's vertex normals.  This data is then transfered to the CPU and the octree is filled.  The octree is then sent to the GPU for drawing.
+
+I am still considering the old conversion shader to combine morton code with an on-disk hash table. This would enable nearly instant access time from disk.
 
 
 ## Features
@@ -38,8 +42,7 @@ L - set light direction to camera's perspective
 - Stream data from HDD to CPU, and CPU to GPU
 - Improve rendering performance by storing parent index
 - There are 8 unused bits in the conversion buffer that can be used for something. Maybe roughness or metallic.
-- The gpu_gen.cpp and convertOctree.comp attempt to create the octree directly on the GPU; however, a race condition at line 95 in the shader causes two shader invocations to create a new tree node at the same time. The resulting voxel representation isn't bad, but there are dozens of small blocks scattered throughout the octree.  Also, there are likely unused nodes in the array buffer due to this race condition. I can't think of a fix right now, but I will keep brainstorming.
-
+- Make gpu octree gen more reliable
 
 ## Dependencies
 [VoxGL](https://github.com/jfriedson/voxgl)
