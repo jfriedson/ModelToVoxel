@@ -32,7 +32,7 @@ L - set light direction to camera's perspective
 
 
 ## Limitations
-- The maximum tree depth obtainable is around 12 or 13 levels. I need to look into the memory usage more, but this could be due to the conversion shader filling the storage buffer, or the octree surpasing the size of the storage buffer. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, 4096^3, which is almost 69 billion voxels in total.
+- The maximum tree depth attainable is around 11 or 12 levels. I need to look into the memory usage more, but this could be due to the conversion shader filling the storage buffer, or the octree surpasing the size of the storage buffer. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, 4096^3, which is almost 69 billion voxels in total.
 
 - The model being converted may contain multiple meshes, however, the conversion shader only accepts a single diffuse texture, so textures must be baked together.
 
