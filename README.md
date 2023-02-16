@@ -1,5 +1,5 @@
 # Model to Voxel
-This project converts conventional 3D model consisting of triangles and a texture into a voxel representation with color, transparancy, and per-voxel normals.
+This project converts conventional 3D models consisting of triangles and a texture into a voxel representation with diffuse color, transparancy, and per-voxel normals.
 
 This relies on [VoxGL](https://github.com/jfriedson/voxgl) for voxel octree data structure and OpenGL interaction.
 
