@@ -8,11 +8,11 @@ This relies on [VoxGL](https://github.com/jfriedson/voxgl) for voxel octree data
 
 
 ## How it works
-The new gpu_gen.cpp and convertOctree.comp allow octree generation on the gpu directly.  This dramatically increases the speed of creating the octree.
+The new gpu_gen.cpp and convertOctree.comp allow octree generation on the gpu directly, while extracting the same visual details as the previous method.  This dramatically increases the speed of filling the octree, on the order of ~4 times faster, although my implementation may be overly cautious of race conditions.
 
 Previously, the conversion shader fills a buffer with voxel data containing the voxel position, color from the texture, and the smoothed normal of the triangle from it's vertex normals.  This data is then transfered to the CPU and the octree is filled.  The octree is then sent to the GPU for drawing.
 
-I am still considering the old conversion shader to combine morton code with an on-disk hash table. This would enable nearly instant access time from disk.
+My next goal for this project is to use morton code as a key for an on-disk hash table. This would enable constant access time from a large storage device in a concurrent manner. This enables the generation of voxel spaces much larger than of those that can fit inside of system and GPU RAM. To visualize this data, unloaded visible voxels will be requested by the GPU and streamed from disk.
 
 
 ## Features
@@ -32,7 +32,7 @@ L - set light direction to camera's perspective
 
 
 ## Limitations
-- The maximum tree depth attainable is around 11 or 12 levels. I need to look into the memory usage more, but this could be due to the conversion shader filling the storage buffer, or the octree surpasing the size of the storage buffer. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, 4096^3, which is almost 69 billion voxels in total.
+- The maximum tree depth attainable is around 11 or 12 levels depending on the space the model occupies. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, 4096^3, which is almost 69 billion voxels in total.
 
 - The model being converted may contain multiple meshes, however, the conversion shader only accepts a single diffuse texture, so textures must be baked together.
 
