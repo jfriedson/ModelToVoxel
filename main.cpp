@@ -1,19 +1,19 @@
 // Convert a traditional 3D model and its texture into an octree with color, transparency, and triangle-face-derived normal data.
 // Optionally, view a previously converted model.
 
-#include "app.h"
+#include "App.h"
 
 
 int main() {
 	App::AppProperties props;
 	props.convertMesh = true;
-	props.svoPath = "asdf.svo";
+	props.svoPath = "gallerygpu.svo";
 
 	// required if convertMesh is true
-	props.conversionDevice = "GPU"; // CPU octree building not yet converted
-	props.modelPath = "./assets/mirage.obj";
-	props.texPath = "./assets/mirage.png";
-	props.octreeDepth = 5;
+	props.conversionDevice = "GPU"; // property not yet used, CPU octree building still being reimplemented
+	props.modelPath = "./assets/gallery.obj";
+	props.texPath = "./assets/gallery.jpg";
+	props.octreeDepth = 11;
 	props.saveModel = true;
 
 

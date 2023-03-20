@@ -6,7 +6,7 @@ in vec2 texCoord;
 
 out vec4 color;
 
-uniform sampler2D rtTexture;
+layout (binding = 0) uniform sampler2D rtTexture;
 
 
 #ifndef FXAA_REDUCE_MIN

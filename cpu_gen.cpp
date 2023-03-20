@@ -1,6 +1,8 @@
 //// Convert a traditional 3D model and its texture into an octree with color, transparency, and normal.
 //// Optionally, view a previously converted model by changing the convertMesh macro.
 //
+//#include "SVODataTypes.h"
+//
 //#include "voxgl.h"
 //
 //#include "model.h"
@@ -31,20 +33,20 @@
 //
 //constexpr int windowWidth = 1280, windowHeight = 720;
 //constexpr bool fullscreen = false;
-//GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight, fullscreen);
+//voxgl::GLFWwindow_ptr window = voxgl::createWindow("voxgl", windowWidth, windowHeight, fullscreen);
 //
 //
 //#if convertMesh
-//	const unsigned int level = 10;
+//	const unsigned int level = 12;
 //	const unsigned int dimension = glm::pow(2, level);
 //
-//	SVO octree(level);
+//	SVO<InnerOctant, Leaf, MaskType> octree(level);
 //
 //	int meshToVoxels() {
-//		glfwMakeContextCurrent(window);
+//		glfwMakeContextCurrent(window.get());
 //		glClearColor(0, 0, 0, 1);
 //		glClear(GL_COLOR_BUFFER_BIT);
-//		glfwSwapBuffers(window);
+//		glfwSwapBuffers(window.get());
 //
 //		GLuint modelToVoxelsVertShader = voxgl::createShader("./shaders/convertMeshToVoxels.vs", GL_VERTEX_SHADER);
 //		GLuint modelToVoxelsGeomShader = voxgl::createShader("./shaders/convertMeshToVoxels.gs", GL_GEOMETRY_SHADER);
@@ -64,8 +66,7 @@
 //		Model model(modelPath);
 //
 //		Texture texture;
-//		texture.LoadTextureLinear(texPath);
-//		texture.UseTexture(1);
+//		texture.LoadTextureLinear(texPath, 1);
 //
 //		GLuint voxelIndex;
 //		glGenBuffers(1, &voxelIndex);
@@ -201,7 +202,7 @@
 //
 //	// create window objects
 //	int framebufferWidth, framebufferHeight;
-//	glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+//	glfwGetFramebufferSize(window.get(), &framebufferWidth, &framebufferHeight);
 //
 //	//framebufferWidth /= 2;
 //	//framebufferHeight /= 2;
@@ -285,7 +286,7 @@
 //
 //	glfwMakeContextCurrent(NULL);
 //	std::thread render_thread([&]() {
-//		glfwMakeContextCurrent(window);
+//		glfwMakeContextCurrent(window.get());
 //
 //		Timer renderPacer(60);
 //
@@ -296,7 +297,7 @@
 //		GLuint timerQueries[2];
 //		glGenQueries(2, timerQueries);
 //
-//		while (!glfwWindowShouldClose(window)) {
+//		while (!glfwWindowShouldClose(window.get())) {
 //			// ray trace compute shader
 //			glUseProgram(rtProgram);
 //
@@ -304,7 +305,7 @@
 //			glUniform3f(camPosUniform, player.camera.position.x, player.camera.position.y, player.camera.position.z);
 //			glUniformMatrix3fv(camMatUniform, 1, GL_FALSE, glm::value_ptr(glm::transpose(player.camera.getMatrix())));
 //
-//			if (glfwGetKey(window, GLFW_KEY_L)) {
+//			if (glfwGetKey(window.get(), GLFW_KEY_L)) {
 //				glm::vec3 sunDir = -glm::normalize(player.camera.facingRay());
 //				glUniform3f(sunDirUniform, sunDir.x, sunDir.y, sunDir.z);
 //			}
@@ -323,7 +324,7 @@
 //			glDrawArrays(GL_TRIANGLES, 0, 3);
 //			glEndQuery(GL_TIME_ELAPSED);
 //
-//			glfwSwapBuffers(window);
+//			glfwSwapBuffers(window.get());
 //
 //
 //			// get timer queries from opengl
@@ -365,7 +366,7 @@
 //				last_refresh = glfwGetTime();
 //			}
 //
-//			if (glfwGetKey(window, GLFW_KEY_R)) {
+//			if (glfwGetKey(window.get(), GLFW_KEY_R)) {
 //				loadRTShader(rtProgram);
 //
 //				resolutionUniform = glGetUniformLocation(rtProgram, "resolution");
@@ -387,12 +388,12 @@
 //	Timer inputPacer(500);
 //	unsigned int timeDelta;
 //
-//	while (!glfwWindowShouldClose(window)) {
+//	while (!glfwWindowShouldClose(window.get())) {
 //		timeDelta = inputPacer.tick()/100;
 //
 //		glfwPollEvents();
-//		if (glfwGetKey(window, GLFW_KEY_ESCAPE))
-//			glfwSetWindowShouldClose(window, GLFW_TRUE);
+//		if (glfwGetKey(window.get(), GLFW_KEY_ESCAPE))
+//			glfwSetWindowShouldClose(window.get(), GLFW_TRUE);
 //
 //		dataLock.lock();
 //

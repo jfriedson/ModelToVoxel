@@ -14,7 +14,7 @@ App::App(AppProperties& props) : props( props ) {
 
 	setupShaders();
 
-	createObjects();
+	setupObjects();
 }
 
 App::~App() {
@@ -57,11 +57,10 @@ void App::setupRenderShader() {
 
 	// quad to display texture
 	glGenVertexArrays(1, &renderShaderProperties.quadVAO);
-	glBindVertexArray(renderShaderProperties.quadVAO);
 
 	// ray trace texture
-	glGenTextures(1, &renderShaderProperties.rtTexture);
 	glActiveTexture(GL_TEXTURE0);
+	glGenTextures(1, &renderShaderProperties.rtTexture);
 	glBindTexture(GL_TEXTURE_2D, renderShaderProperties.rtTexture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -82,9 +81,9 @@ void App::setupRenderShader() {
 }
 
 
-void App::createObjects() {
+void App::setupObjects() {
 	worldObjects.player.position = glm::vec3{-.3f, .7f, -.3f};
-	worldObjects.player.camera.direction = glm::vec2{ 1.57f, 0.f };
+	worldObjects.player.camera.direction = glm::vec2{ .8f, 0.f };
 }
 
 
@@ -109,11 +108,25 @@ void App::loadRTShader() {
 }
 
 
-void App::createSVO() {
+void App::loadSVO() {
 	if (props.convertMesh)
 		convertMeshToVoxels();
 	else
-		worldObjects.octree = std::make_unique<SVO>(props.svoPath);
+		worldObjects.octree = std::make_unique<SVO<InnerOctant, Leaf, MaskType>>(props.svoPath);
+
+	// fitted octree buffers
+	glGenBuffers(1, &renderShaderProperties.inner_octant_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, renderShaderProperties.inner_octant_buf);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, worldObjects.octree->getInnerOctantsSize(), worldObjects.octree->getInnerOctantData(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderShaderProperties.inner_octant_buf);
+
+	glGenBuffers(1, &renderShaderProperties.leaf_buffer);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, renderShaderProperties.leaf_buffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, worldObjects.octree->getLeavesSize(), worldObjects.octree->getLeafData(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderShaderProperties.leaf_buffer);
+
+	// bind quad program VAO
+	glBindVertexArray(renderShaderProperties.quadVAO);
 }
 
 void App::convertMeshToVoxels() {
@@ -121,7 +134,7 @@ void App::convertMeshToVoxels() {
 	glClear(GL_COLOR_BUFFER_BIT);
 	glfwSwapBuffers(windowProperties.window.get());
 
-	worldObjects.octree = std::make_unique<SVO>(props.octreeDepth);
+	worldObjects.octree = std::make_unique<SVO<InnerOctant, Leaf, MaskType>>(props.octreeDepth);
 
 	const unsigned int dimension = glm::pow(2, props.octreeDepth);
 
@@ -144,8 +157,7 @@ void App::convertMeshToVoxels() {
 	Model model(props.modelPath);
 
 	Texture texture;
-	texture.LoadTextureLinear(props.texPath);
-	texture.UseTexture(1);
+	texture.LoadTextureLinear(props.texPath, 1);
 
 	// atomic counters
 	GLuint countersInitial[2] = { 1, 1 };
@@ -155,25 +167,25 @@ void App::convertMeshToVoxels() {
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint) * 2, &countersInitial, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, nodeIndicesCounter);
 
-	// tree nodes
-	worldObjects.octree->setInnerOctantsSize((0x80000000u / sizeof(SVO::InnerOctant)) - 1);
+	// inner node buffer
+	worldObjects.octree->setInnerOctantsSize((0x80000000u / sizeof(InnerOctant)) - 1);
 	GLuint nodeBuffer;
 	glGenBuffers(1, &nodeBuffer);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::InnerOctant), worldObjects.octree->getInnerOctantData(), GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(InnerOctant), worldObjects.octree->getInnerOctantData(), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, nodeBuffer);
 	worldObjects.octree->setInnerOctantsSize(1);
 
-	// tree leaves
-	worldObjects.octree->setLeavesSize((0x80000000u / sizeof(SVO::Leaf)) - 1);
+	// leaf buffer
+	worldObjects.octree->setLeavesSize((0x80000000u / sizeof(Leaf)) - 1);
 	GLuint leafBuffer;
 	glGenBuffers(1, &leafBuffer);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::Leaf), worldObjects.octree->getLeafData(), GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(Leaf), worldObjects.octree->getLeafData(), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, leafBuffer);
 	worldObjects.octree->setLeavesSize(1);
 
-	// timing
+	// timing query object
 	GLuint timerQuery;
 	glGenQueries(1, &timerQuery);
 
@@ -196,7 +208,7 @@ void App::convertMeshToVoxels() {
 	glDeleteQueries(1, &timerQuery);
 
 
-	std::cout << "model conversion: " << elapsed_time / 1000000 << "ms\n";
+	std::cout << "model conversion: " << elapsed_time / 1000 << "us\n";
 
 	texture.~Texture();
 	model.~Model();
@@ -214,14 +226,14 @@ void App::convertMeshToVoxels() {
 	worldObjects.octree->setInnerOctantsSize(voxelCount[0]);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(SVO::InnerOctant) * voxelCount[0], reinterpret_cast<void*>(const_cast<SVO::InnerOctant*>(worldObjects.octree->getInnerOctantData())));
+	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(InnerOctant) * voxelCount[0], reinterpret_cast<void*>(const_cast<InnerOctant* const>(worldObjects.octree->getInnerOctantData())));
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	glDeleteBuffers(1, &nodeBuffer);
 
 	worldObjects.octree->setLeavesSize(voxelCount[1]);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 1, sizeof(SVO::Leaf) * voxelCount[1], reinterpret_cast<void*>(const_cast<SVO::Leaf*>(worldObjects.octree->getLeafData())));
+	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 1, sizeof(Leaf) * voxelCount[1], reinterpret_cast<void*>(const_cast<Leaf* const>(worldObjects.octree->getLeafData())));
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	glDeleteBuffers(1, &leafBuffer);
 
@@ -234,18 +246,7 @@ void App::convertMeshToVoxels() {
 }
 
 void App::run() {
-	createSVO();
-
-	// octree buffers
-	glGenBuffers(1, &renderShaderProperties.inner_octant_buf);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, renderShaderProperties.inner_octant_buf);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, worldObjects.octree->getInnerOctantsSize(), worldObjects.octree->getInnerOctantData(), GL_STATIC_READ);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderShaderProperties.inner_octant_buf);
-
-	glGenBuffers(1, &renderShaderProperties.leaf_buffer);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, renderShaderProperties.leaf_buffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, worldObjects.octree->getLeavesSize(), worldObjects.octree->getLeafData(), GL_STATIC_READ);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderShaderProperties.leaf_buffer);
+	loadSVO();
 
 	// mutex for shader uniform variables
 	std::mutex dataLock;

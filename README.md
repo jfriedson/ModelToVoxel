@@ -1,7 +1,7 @@
 # Model to Voxel
-This project converts conventional 3D models consisting of triangles and a texture into a voxel representation with diffuse color, transparancy, and per-voxel normals.
+This project converts conventional 3D models consisting of triangles and a texture into a voxel representation with diffuse color, transparancy, and per-voxel normals derived from the mesh's triangle face.
 
-This relies on [VoxGL](https://github.com/jfriedson/voxgl) for voxel octree data structure and OpenGL interaction.
+This relies on [VoxGL](https://github.com/jfriedson/voxgl) for sparse octree data structure and OpenGL interaction.
 
 ![Screenshot of voxelized gallery](screenshots/gallery.png?raw=true)
 ![Screenshot of voxelized house](screenshots/house.png?raw=true)
@@ -24,24 +24,24 @@ My next goal for this project is to use morton code as a key for an on-disk hash
 - Small shadows show up as a few black pixels. This looks ugly. To try and remediate this, I copied a FXAA implementation but the small black pixels still stand out. FXAA does help with shimmering while the camera is moving.
 
 ## Controls
-WASD - move around
-
-Mouse - look around
-
+WASD - move around\
+Shift - move slower\
+Mouse - look around\
 L - set light direction to camera's perspective
 
 
 ## Limitations
-- The maximum tree depth attainable is around 11 or 12 levels depending on the space the model occupies. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, 4096^3, which is almost 69 billion voxels in total.
+- The maximum tree depth attainable on an 8GB VRAM video card is around 11 or 12 levels depending on the conversion method. A tree depth of 12 translates to a voxel space resolution of (2^12)^3, or 4096^3, which is almost 69 billion voxels in total.
 
-- The model being converted may contain multiple meshes, however, the conversion shader only accepts a single diffuse texture, so textures must be baked together.
+- The model being converted may contain multiple meshes, however, the conversion shader only accepts a single diffuse texture, so textures must be baked together beforehand.
 
 
 ## Future Improvements
 - Compress voxel data with DAG
 - Stream data from HDD to CPU, and CPU to GPU
 - Improve rendering performance by storing parent index
-- There are 8 unused bits in the conversion buffer that can be utilized for something. Maybe roughness or metallic.
+- There are 8 unused bits in the conversion buffer that can be utilized for something. Maybe roughness or metallic properties.
+
 
 ## Dependencies
 [VoxGL](https://github.com/jfriedson/voxgl)

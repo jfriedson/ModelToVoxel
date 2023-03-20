@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SVODataTypes.h"
+
 #include <voxgl.h>
 #include <model.h>
 #include <texture.h>
@@ -12,6 +14,7 @@
 #include <glm/gtc/noise.hpp>
 
 #include <mutex>
+
 
 
 class App
@@ -71,7 +74,7 @@ private:
 	} sharedProperties;
 
 	struct {
-		std::unique_ptr<SVO> octree;
+		std::unique_ptr<SVO<InnerOctant, Leaf, MaskType>> octree;
 		Player player;
 	} worldObjects;
 
@@ -99,12 +102,12 @@ private:
 	void setupShaders();
 	void setupRenderShader();
 
-	void createObjects();
+	void setupObjects();
 
 	void loadPTShader();
 	void loadRTShader();
 
-	void createSVO();
+	void loadSVO();
 	void convertMeshToVoxels();
 
 	const std::thread renderThread(std::mutex& dataLock);

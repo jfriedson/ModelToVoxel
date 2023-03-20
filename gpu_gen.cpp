@@ -1,6 +1,8 @@
 //// Convert a traditional 3D model and its texture into an octree on the gpu with color, transparency, and normal data and rendering.
 //// Optionally, view a previously converted model by changing the convertMesh macro.
 //
+//#include "SVODataTypes.h"
+//
 //#include "voxgl.h"
 //
 //#include "model.h"
@@ -35,10 +37,10 @@
 //
 //
 //#if convertMesh
-//const unsigned int level = 9;
+//const unsigned int level = 11;
 //const unsigned int dimension = glm::pow(2, level);
 //
-//SVO octree(level);
+//SVO<InnerOctant, Leaf, MaskType> octree(level);
 //
 //int meshToVoxels() {
 //	glfwMakeContextCurrent(window.get());
@@ -65,8 +67,7 @@
 //	Model model(modelPath);
 //
 //	Texture texture;
-//	texture.LoadTextureLinear(texPath);
-//	texture.UseTexture(1);
+//	texture.LoadTextureLinear(texPath, 1);
 //
 //	// atomic counters
 //	GLuint countersInitial[2] = { 1, 1 };
@@ -77,20 +78,20 @@
 //	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, nodeIndicesCounter);
 //
 //	// tree nodes
-//	octree.setInnerOctantsSize((0x80000000u / sizeof(SVO::InnerOctant)) - 1);
+//	octree.setInnerOctantsSize((0x80000000u / sizeof(InnerOctant)) - 1);
 //	GLuint nodeBuffer;
 //	glGenBuffers(1, &nodeBuffer);
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::InnerOctant), octree.getInnerOctantData(), GL_DYNAMIC_COPY);
+//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(InnerOctant), octree.getInnerOctantData(), GL_DYNAMIC_COPY);
 //	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, nodeBuffer);
 //	octree.setInnerOctantsSize(1);
 //
 //	// tree leaves
-//	octree.setLeavesSize((0x80000000u / sizeof(SVO::Leaf)) - 1);
+//	octree.setLeavesSize((0x80000000u / sizeof(Leaf)) - 1);
 //	GLuint leafBuffer;
 //	glGenBuffers(1, &leafBuffer);
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::Leaf), octree.getLeafData(), GL_DYNAMIC_COPY);
+//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(Leaf), octree.getLeafData(), GL_DYNAMIC_COPY);
 //	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, leafBuffer);
 //	octree.setLeavesSize(1);
 //
@@ -135,14 +136,14 @@
 //	octree.setInnerOctantsSize(voxelCount[0]);
 //
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(SVO::InnerOctant) * voxelCount[0], (void*)octree.getInnerOctantData());
+//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(InnerOctant) * voxelCount[0], (void*)octree.getInnerOctantData());
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 //	glDeleteBuffers(1, &nodeBuffer);
 //
 //	octree.setLeavesSize(voxelCount[1]);
 //
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 1, sizeof(SVO::Leaf) * voxelCount[1], (void*)octree.getLeafData());
+//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 1, sizeof(Leaf) * voxelCount[1], (void*)octree.getLeafData());
 //	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 //	glDeleteBuffers(1, &leafBuffer);
 //

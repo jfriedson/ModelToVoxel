@@ -37,7 +37,7 @@ uniform mat3 cameraMat;
 
 uniform vec3 sunDir;
 
-layout(rgba8) restrict writeonly uniform image2D texture;
+layout(binding = 0, rgba8) restrict writeonly uniform image2D texture;
 
 
 const float MIN_STEP = 0.00001f;
