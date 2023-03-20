@@ -1,42 +1,70 @@
 #version 460
 
-//#define SAFE_INSERT
+#extension GL_ARB_gpu_shader_int64 : enable
+
 
 layout(triangles) in;
 layout (triangle_strip, max_vertices = 3) out;
 
+
 in vec3 vsNormals[];
 in vec2 vsTexCoords[];
 
-uniform uint treeDepth;
 uniform float voxelResolution;
 
-layout(binding = 0) uniform atomic_uint nodeIndex;
-layout(binding = 0) uniform atomic_uint leafIndex;
-
-struct InnerOctant {
-	uint children[8];
-};
-
-struct Leaf {
-	uint color;	// packed 4x8 rgb color and transparency
-	uint normal;  // packed 4x8 normal and metal
-};
-
-layout(binding = 0, std430) volatile coherent buffer InnerOctants {
-	InnerOctant innerOctants[];
-};
-
-layout(binding = 1, std430) volatile coherent buffer Leaves {
-	Leaf leaves[];
-};
-
-const uint leafBit = 0x80000000, leafData = 0x7FFFFFFF;
+layout(offset = 0, binding = 0) uniform atomic_uint voxelIndex;
+layout(std430, binding = 0) writeonly buffer voxelBuffer { uvec4 voxels[]; };
 
 layout(binding = 1) uniform sampler2D diffuseTex;
+// layout(binding = 2) uniform sampler2D aoTex;
+// layout(binding = 3) uniform sampler2D emissiveTex;
+// layout(binding = 4) uniform sampler2D metalRoughnessTex;
+// layout(binding = 5) uniform sampler2D normlTex;
 
 
-void calcNormalAndAxis(inout mat3 vertices, out vec3 normal, out mat3 rotationMatrix) {
+void barycentric(in const vec3 p, in const mat3 vertices, out vec3 projCoord);
+void calcNormalAndAxis( inout mat3 vertices, out vec3 normal, out mat3 rotationMatrix);
+
+uint64_t encodeComponent(in const uint c);
+uvec2 morton(in const uvec3 pos);
+bool writeVoxels(in const uvec3 coord, in const vec4 color, in const vec3 normal);
+
+void voxelize(in const mat3 vertices, in const vec3 normal, in const mat3 rotationMatrix, in const uvec3 minVoxIndex, in const uvec3 maxVoxIndex);
+
+void main() {
+	mat3 vertices = { gl_in[0].gl_Position.xyz,
+					  gl_in[1].gl_Position.xyz,
+					  gl_in[2].gl_Position.xyz };
+
+	vec3 normal;
+	mat3 rotationMatrix;
+	
+	calcNormalAndAxis(vertices, normal, rotationMatrix);
+
+	// limit triangle overlap test to the voxel space of triangle's AABB for efficiency
+	const vec3 AABBmin = min(min(vertices[0], vertices[1]), vertices[2]);
+	const vec3 AABBmax = max(max(vertices[0], vertices[1]), vertices[2]);
+
+	const uvec3 minVoxIndex = uvec3(clamp(floor(AABBmin), uvec3(0), uvec3(voxelResolution)));
+	const uvec3 maxVoxIndex = uvec3(clamp( ceil(AABBmax), uvec3(0), uvec3(voxelResolution)));
+
+	voxelize(vertices, normal, rotationMatrix, minVoxIndex, maxVoxIndex);
+}
+
+
+void barycentric(in const vec3 p, in const mat3 vertices, out vec3 projCoord) {
+    const vec3 v0 = vertices[1] - vertices[0],
+               v1 = vertices[2] - vertices[0],
+               v2 =           p - vertices[0];
+
+    const float den = v0.x * v1.y - v1.x * v0.y;
+
+    projCoord.y = (v2.x * v1.y - v1.x * v2.y) / den;
+    projCoord.z = (v0.x * v2.y - v2.x * v0.y) / den;
+    projCoord.x = 1.f - projCoord.y - projCoord.z;
+}
+
+void calcNormalAndAxis( inout mat3 vertices, out vec3 normal, out mat3 rotationMatrix) {
 	normal = normalize(cross(vertices[1] - vertices[0], vertices[2] - vertices[1]));
 	const vec3 absN = abs(normal);
 	const float maxAbsN = max(max(absN.x, absN.y), absN.z);
@@ -55,105 +83,42 @@ void calcNormalAndAxis(inout mat3 vertices, out vec3 normal, out mat3 rotationMa
 }
 
 
-void barycentric(in const vec3 p, in const mat3 vertices, out vec3 projCoord) {
-    const vec3 v0 = vertices[1] - vertices[0],
-               v1 = vertices[2] - vertices[0],
-               v2 =           p - vertices[0];
+uint64_t encodeComponent(in const uint c) {
+	uint64_t morton = c & 0x3FFFFFu;
 
-    const float den = v0.x * v1.y - v1.x * v0.y;
+	morton = (morton ^ (morton << 32)) & 0x1F00000000FFFFl;
+	morton = (morton ^ (morton << 16)) & 0x1F0000FF0000FFl;
+	morton = (morton ^ (morton << 8))  & 0x100F00F00F00F00Fl;
+	morton = (morton ^ (morton << 4))  & 0x10C30C30C30C30C3l;
+	
+	return   (morton ^ (morton << 2))  & 0x1249249249249249l;
+}
 
-    projCoord.y = (v2.x * v1.y - v1.x * v2.y) / den;
-    projCoord.z = (v0.x * v2.y - v2.x * v0.y) / den;
-    projCoord.x = 1.f - projCoord.y - projCoord.z;
+uvec2 morton(in const uvec3 pos) {
+	uint64_t x = encodeComponent(pos.x);
+	uint64_t y = encodeComponent(pos.y);
+	uint64_t z = encodeComponent(pos.z);
+
+	uint64_t morton = x | (y << 1) | (z << 2);
+
+	return uvec2(morton >> 32, morton & 0xFFFFFFFFu);
 }
 
 
-bool writeVoxels(in const vec3 coord, in const vec4 color, in const vec3 normal) {
-#ifdef SAFE_INSERT
-	// check if there is room in leaf buffer
-	const uint check = atomicCounter(leafIndex);
-	if (check >= 0xFFFFFFFu)
+bool writeVoxels(in const uvec3 coord, in const vec4 color, in const vec3 normal) {
+	const uint idx = atomicCounterIncrement(voxelIndex);
+	if (idx >= 0x1FFFFFFFu) {
+		atomicCounterExchange(voxelIndex, 0x1FFFFFFFu);
 		return false;
-#endif
-
-	// iterate through tree
-	uint depth = 0;
-	float extent = .5f;
-
-	uint index = 0;
-	vec3 offset = vec3(0);
-
-	while (++depth < treeDepth) {
-		const bvec3 mask = greaterThanEqual(coord, offset + extent);
-		const int child = int(mask.x) + (int(mask.y) * 2) + (int(mask.z) * 4);
-
-		offset += vec3(mask) * vec3(extent);
-
-		const uint value = atomicCompSwap(innerOctants[index].children[child], leafBit, 0);
-		// leaf, replace with inner node
-		if(value == leafBit) {
-			const uint idx = atomicCounterIncrement(nodeIndex);
-
-		#ifdef SAFE_INSERT
-			if (idx >= 0x3FFFFFFu) {
-				atomicCounterExchange(nodeIndex, 0x3FFFFFFu);
-				
-				innerOctants[index].children[child] = leafBit;
-				
-				memoryBarrier();
-
-				return false;
-			}
-		#endif
-
-			// set this last purposely for other threads waiting on us
-			innerOctants[index].children[child] = idx;
-
-			//memoryBarrier();
-		}
-		// node is being created by another thread, wait
-		while(innerOctants[index].children[child] == 0) { }//memoryBarrier(); }
-
-	#ifdef SAFE_INSERT
-		if (innerOctants[index].children[child] == leafBit)
-			return false;
-	#endif
-
-		index = innerOctants[index].children[child];
-
-        extent *= 0.5f;
 	}
 
-	// leaf
-	const bvec3 mask = greaterThanEqual(coord, offset + extent);
-	const int child = int(mask.x) + (int(mask.y) * 2) + (int(mask.z) * 4);
-
-	if (atomicCompSwap(innerOctants[index].children[child], leafBit, 0) == leafBit) {
-		const uint idx = atomicCounterIncrement(leafIndex);
-
-	#ifdef SAFE_INSERT
-		if (idx >= 0xFFFFFFFu) {
-			atomicCounterExchange(nodeIndex, 0xFFFFFFFu);
-
-			innerOctants[index].children[child] = leafBit;
-
-			memoryBarrier();
-
-			return false;
-		}
-	#endif
-
-		leaves[idx] = Leaf(packUnorm4x8(color.argb), packSnorm4x8(vec4(0, normal)));
-
-		innerOctants[index].children[child] = leafBit | idx;
-
-		//memoryBarrier();
-
-		return true;
-	}
+	voxels[idx] = uvec4( morton(coord),
+						 packUnorm4x8 (color),
+                         packSnorm4x8 (vec4(normal, 0)) );
 
 	return true;
 }
+
 
 void voxelize(in const mat3 vertices, in const vec3 normal, in const mat3 rotationMatrix, in const uvec3 minVoxIndex, in const uvec3 maxVoxIndex) {
 	const vec3 e0 = vertices[1] - vertices[0];	//figure 17/18 line 2
@@ -241,7 +206,7 @@ void voxelize(in const mat3 vertices, in const vec3 normal, in const mat3 rotati
 
 						const vec2 texCoords = projCoord.x * vsTexCoords[0] + projCoord.y * vsTexCoords[1] + projCoord.z * vsTexCoords[2];
 
-						const vec3 pos = (rotationMatrix * pos) / voxelResolution;
+						const uvec3 pos = uvec3((rotationMatrix * pos) / voxelResolution);
 						const vec4 color = texture(diffuseTex, texCoords);
 						vec3 n = projCoord.x * vsNormals[0] + projCoord.y * vsNormals[1] + projCoord.z * vsNormals[2];
 
@@ -252,24 +217,4 @@ void voxelize(in const mat3 vertices, in const vec3 normal, in const mat3 rotati
 			}
 		}
 	}
-}
-
-void main() {
-	mat3 vertices = { gl_in[0].gl_Position.xyz,
-					  gl_in[1].gl_Position.xyz,
-					  gl_in[2].gl_Position.xyz };
-
-	vec3 normal;
-	mat3 rotationMatrix;
-	
-	calcNormalAndAxis(vertices, normal, rotationMatrix);
-
-	// limit triangle overlap test to the voxel space of triangle's AABB for efficiency
-	const vec3 AABBmin = min(min(vertices[0], vertices[1]), vertices[2]);
-	const vec3 AABBmax = max(max(vertices[0], vertices[1]), vertices[2]);
-
-	const uvec3 minVoxIndex = uvec3(clamp(floor(AABBmin), uvec3(0), uvec3(voxelResolution)));
-	const uvec3 maxVoxIndex = uvec3(clamp( ceil(AABBmax), uvec3(0), uvec3(voxelResolution)));
-
-	voxelize(vertices, normal, rotationMatrix, minVoxIndex, maxVoxIndex);
 }

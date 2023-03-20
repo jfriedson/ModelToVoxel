@@ -8,7 +8,7 @@ This relies on [VoxGL](https://github.com/jfriedson/voxgl) for voxel octree data
 
 
 ## How it works
-The new gpu_gen.cpp and convertOctree.comp allow octree generation on the gpu directly, while extracting the same visual details as the previous method.  This dramatically increases the speed of filling the octree, on the order of ~4 times faster, although my implementation may be overly cautious of race conditions.
+The new convertOctree.comp allow octree generation on the gpu directly, while extracting the same visual details as the previous method.  This dramatically increases the speed of filling the octree, on the order of ~4 times faster, although my implementation may be overly cautious of race conditions.
 
 Previously, the conversion shader fills a buffer with voxel data containing the voxel position, color from the texture, and the smoothed normal of the triangle from it's vertex normals.  This data is then transfered to the CPU and the octree is filled.  The octree is then sent to the GPU for drawing.
 
@@ -41,8 +41,7 @@ L - set light direction to camera's perspective
 - Compress voxel data with DAG
 - Stream data from HDD to CPU, and CPU to GPU
 - Improve rendering performance by storing parent index
-- There are 8 unused bits in the conversion buffer that can be used for something. Maybe roughness or metallic.
-- Make gpu octree gen more reliable
+- There are 8 unused bits in the conversion buffer that can be utilized for something. Maybe roughness or metallic.
 
 ## Dependencies
 [VoxGL](https://github.com/jfriedson/voxgl)

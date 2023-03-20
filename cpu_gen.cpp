@@ -1,4 +1,4 @@
-//// Convert a traditional 3D model and its texture into an octree on the gpu with color, transparency, and normal data and rendering.
+//// Convert a traditional 3D model and its texture into an octree with color, transparency, and normal.
 //// Optionally, view a previously converted model by changing the convertMesh macro.
 //
 //#include "voxgl.h"
@@ -26,166 +26,163 @@
 //#define modelPath "./assets/gallery.obj"
 //#define texPath "./assets/gallery.jpg"
 //#define saveModel true
-//#define svoPath "asdf.svo"
+//#define svoPath "gallery.svo"
 //
 //
 //constexpr int windowWidth = 1280, windowHeight = 720;
 //constexpr bool fullscreen = false;
-//voxgl::GLFWwindow_ptr window = voxgl::createWindow("voxgl", windowWidth, windowHeight, fullscreen);
+//GLFWwindow* window = voxgl::createWindow("voxgl", windowWidth, windowHeight, fullscreen);
 //
 //
 //#if convertMesh
-//const unsigned int level = 9;
-//const unsigned int dimension = glm::pow(2, level);
+//	const unsigned int level = 10;
+//	const unsigned int dimension = glm::pow(2, level);
 //
-//SVO octree(level);
+//	SVO octree(level);
 //
-//int meshToVoxels() {
-//	glfwMakeContextCurrent(window.get());
-//	glClearColor(0, 0, 0, 1);
-//	glClear(GL_COLOR_BUFFER_BIT);
-//	glfwSwapBuffers(window.get());
+//	int meshToVoxels() {
+//		glfwMakeContextCurrent(window);
+//		glClearColor(0, 0, 0, 1);
+//		glClear(GL_COLOR_BUFFER_BIT);
+//		glfwSwapBuffers(window);
 //
-//	GLuint modelToVoxelsVertShader = voxgl::createShader("./shaders/convertMeshToVoxels.vs", GL_VERTEX_SHADER);
-//	GLuint modelToVoxelsGeomShader = voxgl::createShader("./shaders/convertOctree.gs", GL_GEOMETRY_SHADER);
-//	GLuint modelToVoxelsFragShader = voxgl::createShader("./shaders/convertMeshToVoxels.fs", GL_FRAGMENT_SHADER);
-//	std::vector<GLuint> modelToVoxelsShaders;
-//	modelToVoxelsShaders.emplace_back(modelToVoxelsVertShader);
-//	modelToVoxelsShaders.emplace_back(modelToVoxelsGeomShader);
-//	modelToVoxelsShaders.emplace_back(modelToVoxelsFragShader);
-//	GLuint modelToVoxelsProgram = voxgl::createProgram(modelToVoxelsShaders);
+//		GLuint modelToVoxelsVertShader = voxgl::createShader("./shaders/convertMeshToVoxels.vs", GL_VERTEX_SHADER);
+//		GLuint modelToVoxelsGeomShader = voxgl::createShader("./shaders/convertMeshToVoxels.gs", GL_GEOMETRY_SHADER);
+//		GLuint modelToVoxelsFragShader = voxgl::createShader("./shaders/convertMeshToVoxels.fs", GL_FRAGMENT_SHADER);
+//		std::vector<GLuint> modelToVoxelsShaders;
+//		modelToVoxelsShaders.emplace_back(modelToVoxelsVertShader);
+//		modelToVoxelsShaders.emplace_back(modelToVoxelsGeomShader);
+//		modelToVoxelsShaders.emplace_back(modelToVoxelsFragShader);
+//		GLuint modelToVoxelsProgram = voxgl::createProgram(modelToVoxelsShaders);
 //
-//	GLuint treeDepthUniform = glGetUniformLocation(modelToVoxelsProgram, "treeDepth");
-//	GLuint voxelResolutionUniform = glGetUniformLocation(modelToVoxelsProgram, "voxelResolution");
 //
-//	glUseProgram(modelToVoxelsProgram);
-//	glUniform1ui(treeDepthUniform, level);
-//	glUniform1f(voxelResolutionUniform, (float)dimension);
+//		GLuint voxelResolutionUniform = glGetUniformLocation(modelToVoxelsProgram, "voxelResolution");
 //
-//	Model model(modelPath);
+//		glUseProgram(modelToVoxelsProgram);
+//		glUniform1f(voxelResolutionUniform, (float)dimension);
 //
-//	Texture texture;
-//	texture.LoadTextureLinear(texPath);
-//	texture.UseTexture(1);
+//		Model model(modelPath);
 //
-//	// atomic counters
-//	GLuint countersInitial[2] = { 1, 1 };
-//	GLuint nodeIndicesCounter;
-//	glGenBuffers(1, &nodeIndicesCounter);
-//	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, nodeIndicesCounter);
-//	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint) * 2, &countersInitial, GL_DYNAMIC_DRAW);
-//	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, nodeIndicesCounter);
+//		Texture texture;
+//		texture.LoadTextureLinear(texPath);
+//		texture.UseTexture(1);
 //
-//	// tree nodes
-//	octree.setInnerOctantsSize((0x80000000u / sizeof(SVO::InnerOctant)) - 1);
-//	GLuint nodeBuffer;
-//	glGenBuffers(1, &nodeBuffer);
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::InnerOctant), octree.getInnerOctantData(), GL_DYNAMIC_COPY);
-//	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, nodeBuffer);
-//	octree.setInnerOctantsSize(1);
+//		GLuint voxelIndex;
+//		glGenBuffers(1, &voxelIndex);
+//		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, voxelIndex);
+//		glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_DRAW);
+//		glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, voxelIndex);
 //
-//	// tree leaves
-//	octree.setLeavesSize((0x80000000u / sizeof(SVO::Leaf)) - 1);
-//	GLuint leafBuffer;
-//	glGenBuffers(1, &leafBuffer);
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-//	glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u - sizeof(SVO::Leaf), octree.getLeafData(), GL_DYNAMIC_COPY);
-//	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, leafBuffer);
-//	octree.setLeavesSize(1);
+//		GLuint voxelBuffer;
+//		glGenBuffers(1, &voxelBuffer);
+//		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelBuffer);
+//		glBufferData(GL_SHADER_STORAGE_BUFFER, 0x80000000u, NULL, GL_DYNAMIC_COPY);
+//		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, voxelBuffer);
 //
-//	// timing
-//	GLuint timerQuery;
-//	glGenQueries(1, &timerQuery);
+//		// timing
+//		GLuint timerQuery;
+//		glGenQueries(1, &timerQuery);
 //
-//	glBeginQuery(GL_TIME_ELAPSED, timerQuery);
+//		glBeginQuery(GL_TIME_ELAPSED, timerQuery);
 //
-//	// conversion
-//	model.render();
-//	glMemoryBarrier(GL_ALL_BARRIER_BITS);
+//		model.render();
 //
-//	glEndQuery(GL_TIME_ELAPSED);
-//	GLint queryAvailable = 0;
-//	GLuint elapsed_time;
+//		glMemoryBarrier(GL_ALL_BARRIER_BITS);
 //
-//	while (!queryAvailable) {
-//		glGetQueryObjectiv(timerQuery,
-//			GL_QUERY_RESULT_AVAILABLE,
-//			&queryAvailable);
+//		glEndQuery(GL_TIME_ELAPSED);
+//		GLint queryAvailable = 0;
+//		GLuint elapsed_time;
+//
+//		while (!queryAvailable) {
+//			glGetQueryObjectiv(timerQuery,
+//				GL_QUERY_RESULT_AVAILABLE,
+//				&queryAvailable);
+//		}
+//		glGetQueryObjectuiv(timerQuery, GL_QUERY_RESULT, &elapsed_time);
+//
+//
+//		std::cout << "model conversion: " << elapsed_time / 1000000 << "ms\n";
+//
+//		texture.~Texture();
+//		model.~Model();
+//
+//		// get voxel data from gpu
+//		GLuint voxelCount;
+//		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, voxelIndex);
+//		glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &voxelCount);
+//		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+//
+//		std::cout << voxelCount << " voxels converted\n";
+//
+//		std::vector<glm::uvec4> voxelVec(voxelCount);
+//		glBindBuffer(GL_SHADER_STORAGE_BUFFER, voxelBuffer);
+//		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(glm::uvec4) * voxelCount, voxelVec.data());
+//		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+//
+//		glMemoryBarrier(GL_ALL_BARRIER_BITS);
+//
+//		glDeleteBuffers(1, &voxelIndex);
+//		glDeleteBuffers(1, &voxelBuffer);
+//
+//		glDeleteQueries(1, &timerQuery);
+//
+//		glDeleteProgram(modelToVoxelsProgram);
+//
+//
+//		std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
+//
+//		/*std::atomic<int> voxelIdx = 0;
+//		int vecSize = voxelVec.size();
+//
+//		std::mutex mut;
+//		std::vector<std::thread> threads;
+//		for (int i = 0; i < 16; ++i) {
+//			threads.push_back(std::thread([&]() {
+//				int idx;
+//				while ((idx = voxelIdx++) < vecSize) {
+//					glm::uvec4* const info = &voxelVec[idx];
+//
+//					const glm::vec2 a = glm::unpackSnorm2x16(info->x);
+//					const glm::vec2 b = glm::unpackSnorm2x16(info->y);
+//					const glm::vec2 c = glm::unpackSnorm2x16(info->z);
+//
+//					const glm::uint32_t normal = glm::packSnorm4x8(glm::vec4(b.y, c.x, c.y, 0.f));
+//
+//					octree.addElement(mut, glm::vec3(a.x, a.y, b.x) * glm::vec3(dimension), info->w, normal);
+//				}
+//				}));
+//		}
+//
+//		for (auto& t : threads)
+//			t.join();*/
+//
+//		while(!voxelVec.empty()) {
+//			glm::uvec4* const info = &voxelVec.back();
+//			voxelVec.pop_back();
+//
+//			const glm::vec2 a = glm::unpackSnorm2x16(info->x);
+//			const glm::vec2 b = glm::unpackSnorm2x16(info->y);
+//			const glm::vec2 c = glm::unpackSnorm2x16(info->z);
+//
+//			const glm::uint32_t normal = glm::packSnorm4x8(glm::vec4(b.y, c.x, c.y, 0.f));
+//
+//			octree.addElement(glm::vec3(a.x, a.y, b.x) * glm::vec3(dimension), info->w, normal);
+//		}
+//
+//		voxelVec.~vector();
+//
+//		std::cout << "octree gen: " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
+//
+//		if (saveModel)
+//			octree.save(svoPath);
+//
+//		octree.printTree(false);
+//
+//		return 0;
 //	}
-//	glGetQueryObjectuiv(timerQuery, GL_QUERY_RESULT, &elapsed_time);
-//	glDeleteQueries(1, &timerQuery);
-//
-//
-//	std::cout << "model conversion: " << elapsed_time / 1000000 << "ms\n";
-//
-//	texture.~Texture();
-//	model.~Model();
-//
-//	// get voxel data from gpu
-//	GLuint voxelCount[2];
-//	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, nodeIndicesCounter);
-//	glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint) * 2, &voxelCount);
-//	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
-//	glDeleteBuffers(1, &nodeIndicesCounter);
-//
-//	std::cout << voxelCount[0] << " elements in octree\n";
-//	std::cout << voxelCount[1] << " leaves\n";
-//
-//	octree.setInnerOctantsSize(voxelCount[0]);
-//
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, nodeBuffer);
-//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(SVO::InnerOctant) * voxelCount[0], (void*)octree.getInnerOctantData());
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-//	glDeleteBuffers(1, &nodeBuffer);
-//
-//	octree.setLeavesSize(voxelCount[1]);
-//
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafBuffer);
-//	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 1, sizeof(SVO::Leaf) * voxelCount[1], (void*)octree.getLeafData());
-//	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-//	glDeleteBuffers(1, &leafBuffer);
-//
-//	glDeleteProgram(modelToVoxelsProgram);
-//
-//	//std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
-//
-//
-//	//for (unsigned int voxel = 0; voxel < voxelCount; voxel++) {
-//	//	glm::uvec4* const info = &voxelVec.back();
-//	//	const glm::vec2 a = glm::unpackSnorm2x16(info->x);
-//	//	const glm::vec2 b = glm::unpackSnorm2x16(info->y);
-//	//	const glm::vec2 c = glm::unpackSnorm2x16(info->z);
-//
-//	//	const glm::uint32_t normal = glm::packSnorm4x8(glm::vec4(b.y, c.x, c.y, 0.f));
-//
-//	//	octree.addElement(glm::vec3(a.x, a.y, b.x) * glm::vec3(dimension), info->w, normal);
-//
-//	//	voxelVec.pop_back();
-//	//	//if(voxel % 100 == 0)
-//	//	//	voxelVec.shrink_to_fit();
-//	//}
-//
-//	// stress test for SVOs. fill every voxel with a random color
-//	/*for (unsigned int x = 0; x < dimension; x++)
-//		for (unsigned int y = 0; y < dimension; y++)
-//			for (unsigned int z = 0; z < dimension; z++)
-//				octree.addElement(x, y, z, glm::packUnorm4x8(glm::vec4(0.4f)));*/
-//
-//				//voxelVec.~vector();
-//
-//				//std::cout << "octree gen: " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime)).count() << "ms" << std::endl;
-//
-//	if (saveModel)
-//		octree.save(svoPath);
-//
-//	octree.printTree(false);
-//
-//	return 0;
-//}
 //#else
-//// load previously converted model
-//SVO octree(svoPath);
+//	// load previously converted model
+//	SVO octree(svoPath);
 //#endif
 //
 //
@@ -204,7 +201,7 @@
 //
 //	// create window objects
 //	int framebufferWidth, framebufferHeight;
-//	glfwGetFramebufferSize(window.get(), &framebufferWidth, &framebufferHeight);
+//	glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
 //
 //	//framebufferWidth /= 2;
 //	//framebufferHeight /= 2;
@@ -288,7 +285,7 @@
 //
 //	glfwMakeContextCurrent(NULL);
 //	std::thread render_thread([&]() {
-//		glfwMakeContextCurrent(window.get());
+//		glfwMakeContextCurrent(window);
 //
 //		Timer renderPacer(60);
 //
@@ -299,7 +296,7 @@
 //		GLuint timerQueries[2];
 //		glGenQueries(2, timerQueries);
 //
-//		while (!glfwWindowShouldClose(window.get())) {
+//		while (!glfwWindowShouldClose(window)) {
 //			// ray trace compute shader
 //			glUseProgram(rtProgram);
 //
@@ -307,7 +304,7 @@
 //			glUniform3f(camPosUniform, player.camera.position.x, player.camera.position.y, player.camera.position.z);
 //			glUniformMatrix3fv(camMatUniform, 1, GL_FALSE, glm::value_ptr(glm::transpose(player.camera.getMatrix())));
 //
-//			if (glfwGetKey(window.get(), GLFW_KEY_L)) {
+//			if (glfwGetKey(window, GLFW_KEY_L)) {
 //				glm::vec3 sunDir = -glm::normalize(player.camera.facingRay());
 //				glUniform3f(sunDirUniform, sunDir.x, sunDir.y, sunDir.z);
 //			}
@@ -326,7 +323,7 @@
 //			glDrawArrays(GL_TRIANGLES, 0, 3);
 //			glEndQuery(GL_TIME_ELAPSED);
 //
-//			glfwSwapBuffers(window.get());
+//			glfwSwapBuffers(window);
 //
 //
 //			// get timer queries from opengl
@@ -368,7 +365,7 @@
 //				last_refresh = glfwGetTime();
 //			}
 //
-//			if (glfwGetKey(window.get(), GLFW_KEY_R)) {
+//			if (glfwGetKey(window, GLFW_KEY_R)) {
 //				loadRTShader(rtProgram);
 //
 //				resolutionUniform = glGetUniformLocation(rtProgram, "resolution");
@@ -385,17 +382,17 @@
 //		}
 //
 //		glDeleteQueries(2, &timerQueries[0]);
-//		});
+//	});
 //
 //	Timer inputPacer(500);
 //	unsigned int timeDelta;
 //
-//	while (!glfwWindowShouldClose(window.get())) {
-//		timeDelta = inputPacer.tick() / 100;
+//	while (!glfwWindowShouldClose(window)) {
+//		timeDelta = inputPacer.tick()/100;
 //
 //		glfwPollEvents();
-//		if (glfwGetKey(window.get(), GLFW_KEY_ESCAPE))
-//			glfwSetWindowShouldClose(window.get(), GLFW_TRUE);
+//		if (glfwGetKey(window, GLFW_KEY_ESCAPE))
+//			glfwSetWindowShouldClose(window, GLFW_TRUE);
 //
 //		dataLock.lock();
 //
