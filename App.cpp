@@ -276,7 +276,11 @@ const std::thread App::renderThread(std::mutex& dataLock) {
 			glUseProgram(renderShaderProperties.rtProgram);
 
 			dataLock.lock();
-			glUniform3f(renderShaderProperties.camPosUniform, worldObjects.player.camera.position.x, worldObjects.player.camera.position.y, worldObjects.player.camera.position.z);
+			glUniform3f(renderShaderProperties.camPosUniform,
+						worldObjects.player.camera.position.x,
+						worldObjects.player.camera.position.y,
+						worldObjects.player.camera.position.z);
+
 			glUniformMatrix3fv(renderShaderProperties.camMatUniform, 1, GL_FALSE, glm::value_ptr(glm::transpose(worldObjects.player.camera.getMatrix())));
 
 			if (glfwGetKey(windowProperties.window.get(), GLFW_KEY_L)) {
@@ -332,7 +336,8 @@ const std::thread App::renderThread(std::mutex& dataLock) {
 				auto const renderCount = static_cast<float>(renderTimes.size());
 				auto const drawCount = static_cast<float>(drawTimes.size());
 
-				std::cout << "render time: " << std::reduce(renderTimes.begin(), renderTimes.end()) / renderCount << "us\t" << "draw time: " << std::reduce(drawTimes.begin(), drawTimes.end()) / drawCount << "us" << std::endl;
+				std::cout << "render time: " << std::reduce(renderTimes.begin(), renderTimes.end()) / renderCount << "us\t" <<
+							 "draw time: " << std::reduce(drawTimes.begin(), drawTimes.end()) / drawCount << "us" << std::endl;
 
 				renderTimes.clear();
 				drawTimes.clear();

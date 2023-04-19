@@ -21,14 +21,14 @@ layout (binding = 0) uniform sampler2D rtTexture;
 
 
 void main() {
-	// color = vec4(texture(rtTexture, texCoord).xyz, 1.f);
+    // color = vec4(texture(rtTexture, texCoord).xyz, 1.f);
 
     vec2 inverseVP = 1.f / vec2(1280, 720);
 
-	vec2 v_rgbNW = texCoord + (vec2(-1.0, -1.0) * inverseVP);
-	vec2 v_rgbNE = texCoord + (vec2(1.0, -1.0) * inverseVP);
-	vec2 v_rgbSW = texCoord + (vec2(-1.0, 1.0) * inverseVP);
-	vec2 v_rgbSE = texCoord + (vec2(1.0, 1.0) * inverseVP);
+    vec2 v_rgbNW = texCoord + (vec2(-1.0, -1.0) * inverseVP);
+    vec2 v_rgbNE = texCoord + (vec2(1.0, -1.0) * inverseVP);
+    vec2 v_rgbSW = texCoord + (vec2(-1.0, 1.0) * inverseVP);
+    vec2 v_rgbSE = texCoord + (vec2(1.0, 1.0) * inverseVP);
 
     vec3 rgbNW = texture(rtTexture, v_rgbNW).xyz;
     vec3 rgbNE = texture(rtTexture, v_rgbNE).xyz;
