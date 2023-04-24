@@ -36,6 +36,12 @@ const uint leafBit = 0x80000000, leafData = 0x7FFFFFFF;
 layout(binding = 1) uniform sampler2D diffuseTex;
 
 
+/**
+ * calculate the triangle vertex normals and alter the verticies to reflect the axis of
+ * max projection (the axis who's perspective of the triangle is greatest) on the z axis.
+ * Rotating the triangle in this way maximizes the tested surface area of the triangle
+ * in an effort to eliminate cracks duruing voxelization.
+ */
 void calcNormalAndAxis(inout mat3 vertices, out vec3 normal, out mat3 rotationMatrix) {
     normal = normalize(cross(vertices[1] - vertices[0], vertices[2] - vertices[1]));
     const vec3 absN = abs(normal);
@@ -54,7 +60,10 @@ void calcNormalAndAxis(inout mat3 vertices, out vec3 normal, out mat3 rotationMa
                                                                                     0,1,0) : mat3(1);
 }
 
-
+/**
+ * Calculate the relative position of a point on a triangle's face.
+ * Used for getting sub-triangle texture coordinates and interpolating normal values.
+ */ 
 void barycentric(in const vec3 p, in const mat3 vertices, out vec3 projCoord) {
     const vec3 v0 = vertices[1] - vertices[0],
                v1 = vertices[2] - vertices[0],
@@ -163,60 +172,69 @@ void voxelize( in const mat3 vertices,
                in const uvec3 minVoxIndex,
                in const uvec3 maxVoxIndex )
 {
+    // triangle edges
 	vec3 e0 = vertices[1] - vertices[0];
 	vec3 e1 = vertices[2] - vertices[1];
 	vec3 e2 = vertices[0] - vertices[2];
 
-	// line 4
+	// line 4 - inward-facing normals of edges of the triangle's projection on the X & Y axes
 	vec2 n_e0_xy = (normal.z >= 0) ? vec2(-e0.y, e0.x) : vec2(e0.y, -e0.x);
 	vec2 n_e1_xy = (normal.z >= 0) ? vec2(-e1.y, e1.x) : vec2(e1.y, -e1.x);
 	vec2 n_e2_xy = (normal.z >= 0) ? vec2(-e2.y, e2.x) : vec2(e2.y, -e2.x);
 
-	// line 5
+	// line 5 - inward-facing normals of edges of the triangle's projection on the Y & Z axes
 	vec2 n_e0_yz = (normal.x >= 0) ? vec2(-e0.z, e0.y) : vec2(e0.z, -e0.y);
 	vec2 n_e1_yz = (normal.x >= 0) ? vec2(-e1.z, e1.y) : vec2(e1.z, -e1.y);
 	vec2 n_e2_yz = (normal.x >= 0) ? vec2(-e2.z, e2.y) : vec2(e2.z, -e2.y);
 
-	// line 6
+	// line 6 - inward-facing normals of edges of the triangle's projection on the Z & X axes
 	vec2 n_e0_zx = (normal.y >= 0) ? vec2(-e0.x, e0.z) : vec2(e0.x, -e0.z);
 	vec2 n_e1_zx = (normal.y >= 0) ? vec2(-e1.x, e1.z) : vec2(e1.x, -e1.z);
 	vec2 n_e2_zx = (normal.y >= 0) ? vec2(-e2.x, e2.z) : vec2(e2.x, -e2.z);
 
     
-    // line 7
+    // line 7 - distance factors of edge normals to voxel space bounding box on X & Y planes
     const float d_e0_xy = -dot(n_e0_xy, vertices[0].xy) + max(0.0f, n_e0_xy.x) + max(0.0f, n_e0_xy.y);
     const float d_e1_xy = -dot(n_e1_xy, vertices[1].xy) + max(0.0f, n_e1_xy.x) + max(0.0f, n_e1_xy.y);
     const float d_e2_xy = -dot(n_e2_xy, vertices[2].xy) + max(0.0f, n_e2_xy.x) + max(0.0f, n_e2_xy.y);
 
-    // line 8
+    // line 8 - distance factors of edge normals to voxel space bounding box on X & Y planes
     const float d_e0_yz = -dot(n_e0_yz, vertices[0].yz) + max(0.0f, n_e0_yz.x) + max(0.0f, n_e0_yz.y);
     const float d_e1_yz = -dot(n_e1_yz, vertices[1].yz) + max(0.0f, n_e1_yz.x) + max(0.0f, n_e1_yz.y);
     const float d_e2_yz = -dot(n_e2_yz, vertices[2].yz) + max(0.0f, n_e2_yz.x) + max(0.0f, n_e2_yz.y);
 
-    // line 9
+    // line 9 - distance factors of edge normals to voxel space bounding box verticies on X & Y planes
     const float d_e0_zx = -dot(n_e0_zx, vertices[0].zx) + max(0.0f, n_e0_zx.x) + max(0.0f, n_e0_zx.y);
     const float d_e1_zx = -dot(n_e1_zx, vertices[1].zx) + max(0.0f, n_e1_zx.x) + max(0.0f, n_e1_zx.y);
     const float d_e2_zx = -dot(n_e2_zx, vertices[2].zx) + max(0.0f, n_e2_zx.x) + max(0.0f, n_e2_zx.y);
 
 
-    // line 10
+    // line 10 - normalize projection with respect to the triangle's face normal's z value
+    // ensures that zMin < zMax later on, essentially flipping the face of the triangle
+    // so that we can iterate on the depth (z) axis from a smaller value to a larger one.
     const vec3 nProj = (normal.z < 0.0) ? -normal : normal;
 
+    // distance factor base
     const float dTri = dot(nProj, vertices[0]);
 
-    const float dTriFatMin = dTri - max(nProj.x, 0) - max(nProj.y, 0);	//line 11
-    const float dTriFatMax = dTri - min(nProj.x, 0) - min(nProj.y, 0);	//line 12
+    // line 11 & 12 - distance factor points used in min and max comparisons
+    const float dTriFatMin = dTri - max(nProj.x, 0) - max(nProj.y, 0);	
+    const float dTriFatMax = dTri - min(nProj.x, 0) - min(nProj.y, 0);
 
     const float nzInv = 1.0 / nProj.z;
     
+    // iterate over x and y axes first
     uvec3 pos;
     uint zMin, zMax;
     for (pos.x = minVoxIndex.x; pos.x < maxVoxIndex.x; pos.x++) {
         for (pos.y = minVoxIndex.y; pos.y < maxVoxIndex.y; pos.y++) {
+            // if voxel critical points have positive dot products with respect to the
+            // triangle's inward facing edge normals on the x and y axes,
+            // continue testing along the depth (z) axis
             float dd_e0_xy = d_e0_xy + dot(n_e0_xy, pos.xy);
             float dd_e1_xy = d_e1_xy + dot(n_e1_xy, pos.xy);
             float dd_e2_xy = d_e2_xy + dot(n_e2_xy, pos.xy);
-        
+            
             bool xy_overlap = (dd_e0_xy >= 0) && (dd_e1_xy >= 0) && (dd_e2_xy >= 0);
 
             if (xy_overlap) {
@@ -234,6 +252,7 @@ void voxelize( in const mat3 vertices,
                 zMin = max(minVoxIndex.z, zMin);
                 zMax = min(maxVoxIndex.z, zMax);
                 
+                // perform intersection tests along z axis
                 for (pos.z = zMin; pos.z < zMax; pos.z++) {
                     float dd_e0_yz = d_e0_yz + dot(n_e0_yz, pos.yz);
                     float dd_e1_yz = d_e1_yz + dot(n_e1_yz, pos.yz);
@@ -246,14 +265,20 @@ void voxelize( in const mat3 vertices,
                     bool yz_overlap = (dd_e0_yz >= 0) && (dd_e1_yz >= 0) && (dd_e2_yz >= 0);
                     bool zx_overlap = (dd_e0_zx >= 0) && (dd_e1_zx >= 0) && (dd_e2_zx >= 0);
 
+                    // if all three critical points lie in the positive direction of the edge normals,
+                    // then triangle intersects this voxel
                     if(yz_overlap && zx_overlap) {
                         vec3 projCoord;
                         barycentric(pos, vertices, projCoord);
 
+                        // use barycentric coordinates to interpolate texture position
                         const vec2 texCoords = projCoord.x * vsTexCoords[0] + projCoord.y * vsTexCoords[1] + projCoord.z * vsTexCoords[2];
 
                         const vec3 pos = (rotationMatrix * pos) / voxelResolution;
                         const vec4 color = texture(diffuseTex, texCoords);
+
+                        // interpolate face normal at the point where voxel intersects the triangle
+                        // providing a smooth surface appearance during lighting calculations
                         vec3 n = projCoord.x * vsNormals[0] + projCoord.y * vsNormals[1] + projCoord.z * vsNormals[2];
 
                         if (!writeVoxels(pos, color, normalize(n)))
