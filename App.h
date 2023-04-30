@@ -19,7 +19,51 @@
 
 class App
 {
+public:
+	static App& getInstance(void) {
+		static App instance;
+		return instance;
+	}
+
+	App(const App&) = delete;
+	App& operator=(const App&) = delete;
+
+	~App();
+
+	void run();
+
+
+	struct AppProperties {
+		bool convertMesh;
+		std::string svoPath;
+		std::string conversionDevice;
+		std::string modelPath;
+		std::string texPath;
+		unsigned int octreeDepth;
+		bool saveModel;
+	} props;
+
+
 private:
+	App();
+
+	void createWindow();
+
+	void setupShaders();
+	void setupRenderShader();
+
+	void setupObjects();
+
+	void loadPTShader();
+	void loadRTShader();
+
+	void loadSVO();
+	void convertMeshToVoxels();
+
+	const std::thread renderThread(std::mutex& dataLock);
+	void inputHandler(std::mutex& dataLock);
+
+
 	struct {
 		const int windowWidth = 1280, windowHeight = 720;
 		voxgl::GLFWwindow_ptr window;
@@ -77,40 +121,5 @@ private:
 		std::unique_ptr<SVO<InnerOctant, Leaf, MaskType>> octree;
 		Player player;
 	} worldObjects;
-
-
-public:
-	struct AppProperties {
-		bool convertMesh;
-		std::string svoPath;
-		std::string conversionDevice;
-		std::string modelPath;
-		std::string texPath;
-		unsigned int octreeDepth;
-		bool saveModel;
-	} props;
-
-	App(AppProperties& props);
-	~App();
-
-	void run();
-
-
-private:
-	void createWindow();
-
-	void setupShaders();
-	void setupRenderShader();
-
-	void setupObjects();
-
-	void loadPTShader();
-	void loadRTShader();
-
-	void loadSVO();
-	void convertMeshToVoxels();
-
-	const std::thread renderThread(std::mutex& dataLock);
-	void inputHandler(std::mutex& dataLock);
 };
 

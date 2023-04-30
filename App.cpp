@@ -9,7 +9,7 @@
 
 
 
-App::App(AppProperties& props) : props( props ) {
+App::App() {
 	createWindow();
 
 	setupShaders();

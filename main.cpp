@@ -5,19 +5,18 @@
 
 
 int main() {
-	App::AppProperties props;
-	props.convertMesh = true;
-	props.svoPath = "gallerygpu.svo";
+	App& app = App::getInstance();
+
+	app.props.convertMesh = true;
+	app.props.svoPath = "gallerygpu.svo";
 
 	// required if convertMesh is true
-	props.conversionDevice = "GPU"; // property not yet used, CPU octree building still being reimplemented
-	props.modelPath = "./assets/gallery.obj";
-	props.texPath = "./assets/gallery.jpg";
-	props.octreeDepth = 11;
-	props.saveModel = true;
+	app.props.conversionDevice = "GPU"; // property not yet used, CPU octree building still being reimplemented
+	app.props.modelPath = "./assets/gallery.obj";
+	app.props.texPath = "./assets/gallery.jpg";
+	app.props.octreeDepth = 11;
+	app.props.saveModel = true;
 
-
-	App app(props);
 	app.run();
 
 	return 0;
