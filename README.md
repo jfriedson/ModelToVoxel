@@ -8,7 +8,7 @@ This relies on [VoxGL](https://github.com/jfriedson/voxgl) for sparse octree dat
 
 
 ## How it works
-The new convertOctree.comp enables octree generation on the gpu directly while extracting the same visual details as the CPU implementation.  This removes any need to swap voxel data between the GPU and CPU and dramatically increases the speed of constructing the octree, on the order of ~4 times quicker, although my implementation may be overly cautious of race conditions and could possibly be made faster with more testing.
+The new convertOctree.comp enables octree generation on the gpu directly while extracting the same visual details as the CPU implementation.  This removes any need to swap voxel data between the GPU and CPU and dramatically increases the speed of constructing the octree - on the order of ~4 times quicker; although, the GPU version doesn't merge leaf nodes, unlike the CPU version, and the current implementation may be overly cautious of race conditions and could possibly be made faster with more testing.
 
 Previously, the conversion shader fills a buffer with voxel data containing the voxel position, color from the texture, and the smoothed normal of the triangle from it's vertex normals.  This data is then transfered to the CPU and the octree is filled.  The octree is then sent to the GPU for drawing.
 
